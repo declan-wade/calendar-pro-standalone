@@ -1,0 +1,41 @@
+# Copy to config.yaml (or point CONFIG at this file) and edit.
+
+port: 8080
+
+# How long a calendar is served from memory before it is fetched again.
+refresh_minutes: 5
+
+locale:
+  language: en
+  time_zone: Australia/Perth # IANA zone; times are shown in this zone
+  time_format: language # language, 12 or 24
+  first_weekday: monday # language, or a weekday name
+  country: AU
+
+calendars:
+  # An ICS feed: Google's "secret address in iCal format", an Outlook published calendar,
+  # a school or sports fixture feed. Read-only.
+  - id: calendar.sample
+    name: Sample
+    type: ics
+    url: http://localhost:8099/sample.ics
+
+  # A CalDAV calendar. The password is read from the environment variable named here,
+  # so it never sits in this file. For Fastmail, create an app password with CalDAV access.
+  # - id: calendar.personal
+  #   name: Personal
+  #   type: caldav
+  #   server_url: https://caldav.fastmail.com/dav/
+  #   username: you@example.com
+  #   password_env: FASTMAIL_APP_PASSWORD
+  #   calendar: Personal # the calendar's name as the server shows it
+
+# The card's configuration, exactly as in a Home Assistant dashboard's YAML, without `type`.
+# Every option is documented at https://calendar-card-pro.alexpfau.com.
+# With no `entities`, every calendar above is shown.
+card:
+  title: Calendar
+  days_to_show: 7
+  view: month
+  toolbar:
+    show: true

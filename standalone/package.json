@@ -1,0 +1,27 @@
+{
+  "name": "calendar-pro-standalone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runs Calendar Card Pro outside Home Assistant, with a Node backend for ICS and CalDAV calendars",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build:card": "npm --prefix .. run build",
+    "build:web": "node web/build.mjs",
+    "build:server": "tsc -p server",
+    "build": "npm run build:card && npm run build:web && npm run build:server",
+    "start": "node server/dist/server.js",
+    "test": "node --test server/dist/**/*.test.js"
+  },
+  "dependencies": {
+    "ical.js": "^2.2.1",
+    "tsdav": "^2.5.1",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@mdi/js": "^7.4.47",
+    "@types/node": "^24.19.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^6.0.3"
+  }
+}
