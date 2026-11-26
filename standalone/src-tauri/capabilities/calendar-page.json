@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "calendar-page",
+  "description": "The calendar page the backend serves on 127.0.0.1. Its settings page may save CalDAV passwords to the OS credential store, and nothing else.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*/*"]
+  },
+  "permissions": ["allow-save-passwords"]
+}

@@ -1,10 +1,11 @@
 /**
- * Builds the web app into web/dist: the shim bundle, the static files, and a copy of the
- * card bundle from the repository root's dist/ (run `npm run build:card` first).
+ * Builds the web app into web/dist: the shim bundle, the settings page, the static files, and a
+ * copy of the card bundle and its editor files from the repository root's dist/ (run
+ * `npm run build:card` first).
  */
 
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,7 +22,10 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'card'), { recursive: true });
 
 await build({
-  entryPoints: { app: join(here, 'src', 'main.ts') },
+  entryPoints: {
+    app: join(here, 'src', 'main.ts'),
+    settings: join(here, 'src', 'settings', 'main.ts'),
+  },
   outdir: out,
   bundle: true,
   splitting: true,
@@ -35,4 +39,11 @@ await build({
 
 cpSync(join(here, 'public'), out, { recursive: true });
 cpSync(cardBundle, join(out, 'card', 'calendar-card-pro.js'));
+// The card's visual editor and its translations, which the settings page uses. The card loads
+// them from beside its own file.
+for (const file of readdirSync(dirname(cardBundle))) {
+  if (/^editor(-[a-z-]+)?\.js$/i.test(file)) {
+    cpSync(join(dirname(cardBundle), file), join(out, 'card', file));
+  }
+}
 console.log(`Built ${out}`);

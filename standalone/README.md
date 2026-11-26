@@ -6,8 +6,9 @@ servers and answers in the shape Home Assistant's calendar API uses, so the card
 from this repository unchanged.
 
 Status: read-only. Events show in every view (List, Columns, Grid, Month), the event popover,
-day panel and search work, and calendars refresh every `refresh_minutes`. Adding, editing and
-moving events is not wired up yet.
+day panel and search work, and calendars refresh every `refresh_minutes`. Everything in
+`config.yaml` can be set on the settings page (the gear in the corner, or `/settings.html`).
+Adding, editing and moving events is not wired up yet.
 
 ## How it fits together
 
@@ -58,6 +59,11 @@ docker run -p 8080:8080 -v "$PWD/standalone/config.yaml:/config/config.yaml:ro" 
 
 `compose.example.yaml` does the same with Docker Compose.
 
+The settings page only answers a browser on the same computer as the server (see
+[Settings page](#settings-page)), so in Docker it is off unless you set `SETTINGS_ACCESS=any`,
+and to save it needs the folder holding `config.yaml` mounted writable (`-v "$PWD/config:/config"`)
+rather than the file read-only.
+
 ### Desktop app (Tauri)
 
 `src-tauri/` packages the same app as a desktop app with [Tauri 2](https://v2.tauri.app). The
@@ -81,7 +87,8 @@ Both build the card, the page, the server and the sidecar first.
 
 The app reads `config.yaml` from its configuration folder, on macOS
 `~/Library/Application Support/io.github.declanwade.calendarpro/config.yaml` (the `CONFIG`
-environment variable overrides it). If the file is missing, the app says where to put it.
+environment variable overrides it). If the file is missing, the app says where to put it, and
+offers to open the settings page instead, which writes it.
 `port` is ignored: the app picks its own.
 
 CalDAV passwords: for each `password_env` in the configuration, the app uses the environment
@@ -89,6 +96,34 @@ variable if it is set (as with `npm run tauri dev` from a terminal), and otherwi
 item with service `io.github.declanwade.calendarpro` and account set to the variable's name. If
 there is none, the app asks for the password and saves it there. To change it later, edit or
 delete that item in Keychain Access.
+
+## Settings page
+
+`/settings.html`, linked from the gear in the corner of the calendar, edits everything
+`config.yaml` holds, in five sections:
+
+- **Calendars**: add, remove and reorder ICS feeds and CalDAV calendars. A feed can be tested;
+  a CalDAV account can be connected to list its calendars to choose from. Common CalDAV
+  addresses (Fastmail, iCloud, Nextcloud) are offered.
+- **Region and time**: language, time zone, time format, first day of the week, country.
+- **Card**: every card option, through the card's own visual editor (the one Home Assistant
+  shows), with a live preview. `web/src/settings/ha-form.ts` stands in for Home Assistant's form
+  component, which the editor draws its fields with.
+- **Data and server**: how often calendars are fetched, the port, where the file is.
+- **YAML**: the whole file as text.
+
+Save checks the configuration, writes the file and applies it without a restart (except a new
+port). Only values that changed are rewritten, so the file's comments stay; the previous file is
+kept as `config.yaml.bak`. With no `config.yaml`, or one with a mistake, the server still starts
+and the calendar page sends you to the settings page.
+
+Passwords typed on the page are never written to the file. The desktop app saves them in the
+keychain. A server run from a terminal or Docker keeps them until it stops; set the environment
+variable named by `password_env` to keep one.
+
+Because the page can change what the server connects to, it answers only a browser on the same
+computer by default. `SETTINGS_ACCESS` changes that: `local` (default), `any` (every client; put
+the server behind a proxy that asks for a login), or `off`.
 
 ## Configuration
 
@@ -101,7 +136,8 @@ See [`examples/config.example.yaml`](examples/config.example.yaml). In short:
     calendar's name on the server). For Fastmail, use `https://caldav.fastmail.com/dav/` and an
     app password with CalDAV access.
 - `locale`: `language`, `time_zone` (IANA, such as `Australia/Perth`), `time_format`,
-  `first_weekday`, `country`.
+  `first_weekday`, `country`. With `time_zone` set, the page shows times in that zone wherever
+  the browser runs (`web/src/time-zone.ts`); without it, in the browser computer's own zone.
 - `card`: the card's own options, exactly as in a Home Assistant dashboard. They are documented
   at <https://calendar-card-pro.alexpfau.com>. Calendars are referred to by the `id`s above.
 
@@ -112,7 +148,7 @@ authenticates.
 
 - Adding, editing, moving and deleting events (needs the backend's write endpoints).
 - Live updates: changes appear after `refresh_minutes` or a press of the refresh button.
-- The visual editor, which is built on Home Assistant's form component. Edit `config.yaml`.
+- The visual editor inside the card's own dialog. It is on the settings page instead (Card).
 - Weather, Home Assistant templates and conditions, entity colours from Home Assistant, map
   tiles in the event popover, and tap actions such as `more-info` or `navigate`.
 

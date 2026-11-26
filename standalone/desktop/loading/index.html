@@ -104,7 +104,9 @@
 
       <section id="no-config" hidden>
         <h1>No configuration yet</h1>
-        <p>Put your <code>config.yaml</code> here, then try again:</p>
+        <p>Set up your calendars in the app:</p>
+        <button type="button" id="create-config">Open settings</button>
+        <p>Or put your <code>config.yaml</code> here, then try again:</p>
         <p><code id="config-path"></code></p>
         <p class="muted">
           It is the same file the standalone app reads. <code>port</code> is ignored here: the app
@@ -183,6 +185,16 @@
         const passwords = Object.fromEntries(new FormData(event.target));
         try {
           await invoke('save_passwords', { passwords });
+        } catch (error) {
+          return fail(error);
+        }
+        start();
+      });
+
+      // Writes a starter file with no calendars; the backend then opens its settings page.
+      document.getElementById('create-config').addEventListener('click', async () => {
+        try {
+          await invoke('create_config');
         } catch (error) {
           return fail(error);
         }

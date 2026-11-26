@@ -10,6 +10,8 @@ export interface StandaloneConfig {
   locale: {
     language: string;
     time_zone: string;
+    /** Whether the configuration names `time_zone`, rather than it being the server's own. */
+    time_zone_set: boolean;
     time_format: string;
     first_weekday: string;
     country: string | null;

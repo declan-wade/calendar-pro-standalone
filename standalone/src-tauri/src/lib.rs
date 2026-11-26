@@ -193,6 +193,21 @@ fn save_passwords(app: AppHandle, passwords: HashMap<String, String>) -> Result<
     Ok(())
 }
 
+/// Writes a starter config.yaml with no calendars yet, for the settings page to fill in. The
+/// backend starts without calendars and sends the window to its settings page.
+#[tauri::command]
+fn create_config(app: AppHandle) -> Result<(), String> {
+    let config = config_path(&app)?;
+    if config.exists() {
+        return Ok(());
+    }
+    std::fs::write(
+        &config,
+        "# Written by Calendar Pro. Change it on the settings page, or here.\ncalendars: []\n",
+    )
+    .map_err(|error| format!("Could not write {}: {error}", config.display()))
+}
+
 /// `CONFIG` if set, otherwise config.yaml in the app's configuration folder (on macOS,
 /// ~/Library/Application Support/<identifier>/).
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -242,7 +257,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Backend::default())
-        .invoke_handler(tauri::generate_handler![start, save_passwords])
+        .invoke_handler(tauri::generate_handler![start, save_passwords, create_config])
         .build(tauri::generate_context!())
         .expect("error while building the app")
         .run(|app, event| {

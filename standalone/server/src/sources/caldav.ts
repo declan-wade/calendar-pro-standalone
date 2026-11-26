@@ -6,6 +6,7 @@
 import { createDAVClient, type DAVCalendar } from 'tsdav';
 import type { CaldavCalendarConfig } from '../config.js';
 import type { Window } from '../ical.js';
+import { passwordFor } from '../secrets.js';
 import { TimedCache, type CalendarSource } from './source.js';
 
 type DAVClient = Awaited<ReturnType<typeof createDAVClient>>;
@@ -49,17 +50,15 @@ export class CaldavSource implements CalendarSource {
   }
 
   private async openConnection(): Promise<{ client: DAVClient; calendar: DAVCalendar }> {
-    const password = process.env[this.config.password_env];
+    const password = passwordFor(this.config.password_env);
     if (!password) {
       throw new Error(`${this.id}: environment variable ${this.config.password_env} is not set`);
     }
-    const client = await createDAVClient({
-      serverUrl: this.config.server_url,
-      credentials: { username: this.config.username, password },
-      authMethod: 'Basic',
-      defaultAccountType: 'caldav',
-    });
-    const calendars = await client.fetchCalendars();
+    const { client, calendars } = await logIn(
+      this.config.server_url,
+      this.config.username,
+      password,
+    );
     const wanted = this.config.calendar.trim().toLowerCase();
     const calendar = calendars.find((c) => displayName(c).trim().toLowerCase() === wanted);
     if (!calendar) {
@@ -68,6 +67,47 @@ export class CaldavSource implements CalendarSource {
     }
     return { client, calendar };
   }
+}
+
+/**
+ * Logs in to a CalDAV server and lists its calendars.
+ *
+ * @param serverUrl - The server's address
+ * @param username - Account name
+ * @param password - Password or app password
+ * @returns The client and the account's calendars
+ */
+async function logIn(
+  serverUrl: string,
+  username: string,
+  password: string,
+): Promise<{ client: DAVClient; calendars: DAVCalendar[] }> {
+  const client = await createDAVClient({
+    serverUrl,
+    credentials: { username, password },
+    authMethod: 'Basic',
+    defaultAccountType: 'caldav',
+  });
+  return { client, calendars: await client.fetchCalendars() };
+}
+
+/**
+ * The names of the event calendars an account holds, for the settings page to offer.
+ *
+ * @param serverUrl - The server's address
+ * @param username - Account name
+ * @param password - Password or app password
+ * @returns Display names, in the server's order
+ */
+export async function listCalendarNames(
+  serverUrl: string,
+  username: string,
+  password: string,
+): Promise<string[]> {
+  const { calendars } = await logIn(serverUrl, username, password);
+  return calendars
+    .filter((calendar) => !calendar.components || calendar.components.includes('VEVENT'))
+    .map(displayName);
 }
 
 function displayName(calendar: DAVCalendar): string {
