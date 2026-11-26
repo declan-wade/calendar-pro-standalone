@@ -9,6 +9,10 @@
  * - `GET /api/calendars`: `[{ entity_id, name }]`, as Home Assistant
  * - `GET /api/calendars/<entity_id>?start=<iso>&end=<iso>`: that calendar's occurrences in the
  *   window, as Home Assistant
+ * - `/api/settings`: the settings page's API (`settings-api.ts`)
+ *
+ * With no usable configuration (no file yet, or one with a mistake), the calendar routes answer
+ * 503 with `setup: true`, and the page sends the browser to the settings page.
  */
 
 import { createReadStream } from 'node:fs';
@@ -17,6 +21,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { AppConfig } from './config.js';
 import { expandCalendar } from './ical.js';
+import { createSettingsRoutes, type SettingsOptions } from './settings-api.js';
+import { createSources } from './sources/create.js';
 import type { CalendarSource } from './sources/source.js';
 
 /** Widest window one request may ask for, so a stray request cannot expand decades of events. */
@@ -35,22 +41,39 @@ const TYPES: Record<string, string> = {
 };
 
 export interface AppOptions {
-  config: AppConfig;
+  /** Null while there is no usable configuration; the settings page then sets one up. */
+  config: AppConfig | null;
   sources: CalendarSource[];
+  /** The settings page's API. Left out, there is none. */
+  settings?: Omit<SettingsOptions, 'apply'>;
   /** Directory holding the built web app. */
   webRoot: string;
   log?: (message: string) => void;
 }
 
 export function createHandler(options: AppOptions) {
-  const { config, sources, log = () => {} } = options;
+  const { log = () => {} } = options;
+  let { config, sources } = options;
   const webRoot = resolve(options.webRoot);
-  const byId = new Map(sources.map((source) => [source.id, source]));
+  let byId = new Map(sources.map((source) => [source.id, source]));
+  // A saved configuration replaces the running one, with fresh sources (and empty caches).
+  const settingsRoutes = options.settings
+    ? createSettingsRoutes({
+        ...options.settings,
+        apply(next) {
+          config = next;
+          sources = createSources(next);
+          byId = new Map(sources.map((source) => [source.id, source]));
+          log(`Applied new settings: ${sources.length} calendar(s)`);
+        },
+      })
+    : null;
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     try {
       if (url.pathname.startsWith('/api/')) {
+        if (settingsRoutes && (await settingsRoutes(url, req, res))) return;
         if (req.method !== 'GET') return sendJson(res, 405, { message: 'Method not allowed' });
         return await routeApi(url, res);
       }
@@ -66,6 +89,9 @@ export function createHandler(options: AppOptions) {
   };
 
   async function routeApi(url: URL, res: ServerResponse): Promise<void> {
+    if (!config) {
+      return sendJson(res, 503, { message: 'There is no usable configuration yet', setup: true });
+    }
     if (url.pathname === '/api/config') {
       return sendJson(res, 200, {
         locale: config.locale,
@@ -98,7 +124,12 @@ export function createHandler(options: AppOptions) {
         return sendJson(res, 400, { message: `Window is longer than ${MAX_WINDOW_DAYS} days` });
       }
       const documents = await source.documents({ start, end });
-      return sendJson(res, 200, expandCalendar(documents, { start, end }, config.locale.time_zone));
+      // `config` cannot have gone in the meantime: a save only ever replaces it.
+      return sendJson(
+        res,
+        200,
+        expandCalendar(documents, { start, end }, config!.locale.time_zone),
+      );
     }
     return sendJson(res, 404, { message: 'Not found' });
   }

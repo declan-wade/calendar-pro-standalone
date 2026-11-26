@@ -1,11 +1,12 @@
 /**
- * Starts the standalone app: reads the configuration from the backend, builds the `hass`
- * stand-in, and mounts the card.
+ * Starts the standalone app: reads the configuration from the backend, sets the page's time
+ * zone, loads the card, builds the `hass` stand-in, and mounts the card.
  */
 
 import { installDialogHost } from './dialog-host';
 import { defineHaElements } from './ha-elements';
 import { createHass, type StandaloneConfig } from './hass';
+import { loadCard, useConfiguredTimeZone } from './load-card';
 
 const CARD_TAG = 'calendar-card-pro';
 
@@ -19,9 +20,17 @@ async function start(): Promise<void> {
   defineHaElements();
 
   const response = await fetch('api/config');
+  // No usable configuration yet: the settings page writes one.
+  if (response.status === 503) {
+    window.location.replace('settings.html');
+    return;
+  }
   if (!response.ok) throw new Error(`Could not read the configuration (${response.status})`);
   const config = (await response.json()) as StandaloneConfig;
   document.documentElement.lang = config.locale.language;
+
+  useConfiguredTimeZone(config.locale);
+  await loadCard();
 
   const hass = createHass(config);
   installDialogHost(() => hass);

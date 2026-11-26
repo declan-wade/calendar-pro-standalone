@@ -9,6 +9,7 @@
 
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
+import { isTimeZone } from './time.js';
 
 export interface IcsCalendarConfig {
   type: 'ics';
@@ -39,6 +40,11 @@ export interface LocaleConfig {
   language: string;
   /** IANA time zone, such as `Australia/Perth`. */
   time_zone: string;
+  /**
+   * Whether the file names `time_zone`. When it does not, `time_zone` is the server's own zone,
+   * and the page shows times in the zone of the computer it runs on.
+   */
+  time_zone_set: boolean;
   /** `language`, `12` or `24`, as Home Assistant's profile setting. */
   time_format: string;
   /** `language`, or a weekday name such as `monday`. */
@@ -99,12 +105,27 @@ export function checkConfig(raw: Record<string, unknown>): AppConfig {
     throw new ConfigError('`card` must be a mapping');
   }
 
+  if (
+    locale.time_zone !== undefined &&
+    locale.time_zone !== null &&
+    !isTimeZone(locale.time_zone)
+  ) {
+    throw new ConfigError(
+      `locale.time_zone ${locale.time_zone} is not a time zone this system knows`,
+    );
+  }
+  const refresh = Number(raw.refresh_minutes ?? 5);
+  if (!Number.isFinite(refresh) || refresh <= 0) {
+    throw new ConfigError('`refresh_minutes` must be a number above 0');
+  }
+
   return {
     port: Number(raw.port ?? process.env.PORT ?? 8080),
     refresh_minutes: Number(raw.refresh_minutes ?? 5),
     locale: {
       language: locale.language ?? 'en',
       time_zone: locale.time_zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      time_zone_set: !!locale.time_zone,
       time_format: locale.time_format ?? 'language',
       first_weekday: locale.first_weekday ?? 'language',
       country: locale.country ?? null,
@@ -118,7 +139,14 @@ export function checkConfig(raw: Record<string, unknown>): AppConfig {
   };
 }
 
-function checkCalendar(entry: unknown, index: number): CalendarConfig {
+/**
+ * Checks one entry of `calendars`.
+ *
+ * @param entry - The parsed entry
+ * @param index - Its position, for messages
+ * @returns The calendar
+ */
+export function checkCalendar(entry: unknown, index: number): CalendarConfig {
   const where = `calendars[${index}]`;
   if (!entry || typeof entry !== 'object') throw new ConfigError(`${where} must be a mapping`);
   const c = entry as Record<string, unknown>;

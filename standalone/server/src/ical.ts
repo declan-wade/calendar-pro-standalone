@@ -108,12 +108,15 @@ function expandRecurring(
   timeZone: string,
 ): HaEvent[] {
   const out: HaEvent[] = [];
+  // The iterator's occurrence times drop the series' TZID where no VTIMEZONE defines it, so it
+  // is passed along with them.
+  const seriesZone = tzidOf(event.startDate);
   const iterator = event.iterator();
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const next = iterator.next();
     if (!next) break;
     const details = event.getOccurrenceDetails(next);
-    const start = toInstant(details.startDate, timeZone);
+    const start = toInstant(details.startDate, timeZone, seriesZone);
     if (start >= window.end) {
       // An occurrence moved earlier by an override can still land in the window, but the
       // series' own dates run in order, so nothing later in it can.
@@ -127,6 +130,7 @@ function expandRecurring(
       icalString(details.recurrenceId),
       window,
       timeZone,
+      seriesZone,
     );
   }
   return out;
@@ -140,13 +144,14 @@ function pushIfOverlapping(
   recurrenceId: string | null,
   window: Window,
   timeZone: string,
+  seriesZone?: string,
 ): void {
   if (!startTime) return;
   const allDay = startTime.isDate;
   // An all-day event with no end lasts one day; a timed one with no end is an instant.
   const end = endTime ?? (allDay ? addDays(startTime, 1) : startTime);
-  const startInstant = toInstant(startTime, timeZone);
-  const endInstant = toInstant(end, timeZone);
+  const startInstant = toInstant(startTime, timeZone, seriesZone);
+  const endInstant = toInstant(end, timeZone, seriesZone);
   const overlaps =
     startInstant < window.end &&
     (endInstant > window.start || (+endInstant === +startInstant && startInstant >= window.start));
@@ -172,6 +177,19 @@ function pushIfOverlapping(
   });
 }
 
+/**
+ * A time's TZID. Where no VTIMEZONE defines it, ical.js marks the time floating and keeps the
+ * name only as `timezone`, so that is read too.
+ *
+ * @param time - The time as ical.js read it
+ * @returns The zone's name, `UTC`, or undefined for a floating time
+ */
+function tzidOf(time: IcalTime): string | undefined {
+  const zone = time.zone?.tzid;
+  if (zone && zone !== 'floating') return zone;
+  return (time as unknown as { timezone?: string }).timezone || undefined;
+}
+
 function addDays(time: IcalTime, days: number): IcalTime {
   const copy = time.clone();
   copy.adjust(days, 0, 0, 0);
@@ -184,8 +202,12 @@ function addDays(time: IcalTime, days: number): IcalTime {
  * A UTC time is read as UTC; a time with a TZID `Intl` knows is read in that zone; a TZID that
  * only the document's VTIMEZONE defines is read through ical.js; a floating time, or a date, is
  * read in the configured zone.
+ *
+ * @param time - The time as ical.js read it
+ * @param timeZone - The configured zone
+ * @param seriesZone - The series' TZID, for an occurrence time that has lost its own
  */
-function toInstant(time: IcalTime, timeZone: string): Date {
+function toInstant(time: IcalTime, timeZone: string, seriesZone?: string): Date {
   const wall: WallClock = {
     year: time.year,
     month: time.month,
@@ -195,7 +217,7 @@ function toInstant(time: IcalTime, timeZone: string): Date {
     second: time.isDate ? 0 : time.second,
   };
   if (time.isDate) return instantOf(wall, timeZone);
-  const tzid = time.zone?.tzid ?? (time as unknown as { timezone?: string }).timezone;
+  const tzid = tzidOf(time) ?? seriesZone;
   if (tzid === 'UTC' || tzid === 'Z' || time.zone === ICAL.Timezone.utcTimezone) {
     return new Date(
       Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second),

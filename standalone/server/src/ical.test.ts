@@ -94,3 +94,12 @@ test('converts wall-clock times across a daylight saving change', () => {
   assert.equal(isoInZone(before, 'Australia/Sydney'), '2026-10-03T09:00:00+10:00');
   assert.equal(isoInZone(after, 'Australia/Sydney'), '2026-10-05T09:00:00+11:00');
 });
+
+test('reads a TZID with no VTIMEZONE in its own zone, not the configured one', () => {
+  // The sample's Standup is 09:00 Australia/Perth, a zone the file names without defining it.
+  const events = expandCalendar([sample], week, 'Australia/Sydney');
+  const standup = events.find((event) => event.summary === 'Standup')!;
+  assert.deepEqual(standup.start, { dateTime: '2026-11-23T12:00:00+11:00' });
+  const dentist = events.find((event) => event.summary === 'Dentist')!;
+  assert.deepEqual(dentist.start, { dateTime: '2026-11-27T17:00:00+11:00' });
+});

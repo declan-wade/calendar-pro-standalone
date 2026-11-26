@@ -25,3 +25,16 @@ test('requires the CalDAV fields', () => {
     /server_url is required/,
   );
 });
+
+test('rejects a time zone the system does not know', () => {
+  assert.throws(
+    () => checkConfig({ calendars: [ics], locale: { time_zone: 'Mars/Olympus' } }),
+    /not a time zone/,
+  );
+});
+
+test('says whether the file names a time zone', () => {
+  assert.equal(checkConfig({ calendars: [ics] }).locale.time_zone_set, false);
+  const set = checkConfig({ calendars: [ics], locale: { time_zone: 'Australia/Perth' } });
+  assert.equal(set.locale.time_zone_set, true);
+});
