@@ -1,0 +1,106 @@
+name: Standalone Checks
+
+# Checks for the standalone app in `standalone/`. The card itself is already checked by
+# ci.yml (lint, format, types, i18n, tests, docs, build, bundle), which runs on the same
+# PRs; this file is kept separate so ci.yml stays as upstream has it and merges from
+# upstream stay clean.
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server build and tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # ci.yml fails any workflow that hardcodes a Node version, so this pins from .nvmrc.
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            standalone/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix standalone
+
+      # Builds the card, the page and the server, in that order.
+      - name: Build
+        run: npm --prefix standalone run build
+
+      - name: Test
+        run: npm --prefix standalone test
+
+  desktop:
+    name: Desktop app build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The desktop app (standalone/src-tauri) may not be on the branch yet; skip quietly
+      # rather than fail every PR until it is.
+      - name: Check for the desktop app
+        id: tauri
+        run: |
+          if [ -f standalone/src-tauri/tauri.conf.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No standalone/src-tauri on this branch; skipping the desktop build."
+          fi
+
+      - name: Install Linux build dependencies
+        if: steps.tauri.outputs.present == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config
+
+      - name: Setup Node.js
+        if: steps.tauri.outputs.present == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            standalone/package-lock.json
+
+      - name: Setup Rust
+        if: steps.tauri.outputs.present == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        if: steps.tauri.outputs.present == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: standalone/src-tauri -> target
+
+      - name: Install dependencies
+        if: steps.tauri.outputs.present == 'true'
+        run: |
+          npm ci
+          npm ci --prefix standalone
+
+      # Compiles the app and the sidecar without making installers; the release workflow
+      # makes those.
+      - name: Build
+        if: steps.tauri.outputs.present == 'true'
+        working-directory: standalone
+        run: npm run tauri build -- --no-bundle

@@ -1,0 +1,129 @@
+name: Standalone Release
+
+# Builds the desktop app (standalone/src-tauri) for macOS, Windows and Linux and attaches the
+# installers to a draft GitHub release.
+#
+# Triggered by tags of the form standalone-vX.Y.Z. The prefix keeps these tags away from
+# release.yml, which releases the card on v* tags and would reject a desktop version.
+# The tag must match the version in standalone/package.json and
+# standalone/src-tauri/tauri.conf.json.
+#
+# Each platform builds on its own runner because the sidecar (the Node backend) is built
+# from the runner's own `node` for the runner's own target; it cannot be cross-compiled.
+#
+# The installers are unsigned. macOS will say the app is damaged or from an unidentified
+# developer until it is signed and notarised; `xattr -cr "/Applications/Calendar Pro.app"`
+# works around that on your own machine.
+on:
+  push:
+    tags:
+      - 'standalone-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check for the desktop app
+        run: |
+          if [ ! -f standalone/src-tauri/tauri.conf.json ]; then
+            echo "::error::standalone/src-tauri/tauri.conf.json is not on ${GITHUB_REF_NAME}. Tag a commit that has the desktop app."
+            exit 1
+          fi
+
+      - name: Verify tag matches the app version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#standalone-v}"
+          PKG_VERSION="$(node -p "require('./standalone/package.json').version")"
+          TAURI_VERSION="$(node -p "require('./standalone/src-tauri/tauri.conf.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ] || [ "$TAG_VERSION" != "$TAURI_VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match standalone/package.json ($PKG_VERSION) and tauri.conf.json ($TAURI_VERSION)."
+            exit 1
+          fi
+          echo "Version check passed: ${TAG_VERSION}"
+
+      # Created once here so the build jobs below upload to the same release instead of
+      # racing to create it.
+      - name: Create draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="${GITHUB_REF_NAME}" \
+            -f name="Calendar Pro ${GITHUB_REF_NAME#standalone-v}" \
+            -f body="Desktop builds of Calendar Pro. The installers are unsigned." \
+            -F draft=true \
+            -F prerelease=false \
+            -F make_latest=false \
+            --jq .id)"
+          echo "id=${ID}" >> "$GITHUB_OUTPUT"
+          echo "Created draft release ${ID}"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple silicon
+            runner: macos-latest
+          - name: macOS Intel
+            runner: macos-15-intel
+          - name: Windows x64
+            runner: windows-latest
+          - name: Linux x64
+            # The oldest supported Ubuntu, so the AppImage and .deb run on older glibc too.
+            runner: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config
+
+      # ci.yml fails any workflow that hardcodes a Node version, so this pins from .nvmrc.
+      # This Node is also the one bundled into the app as the sidecar.
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            standalone/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: standalone/src-tauri -> target
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix standalone
+
+      # tauri.conf.json's beforeBuildCommand builds the card, page, server and sidecar.
+      - name: Build and upload
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          projectPath: standalone
+          releaseId: ${{ needs.create-release.outputs.release_id }}
