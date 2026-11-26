@@ -1,0 +1,4 @@
+server/dist/
+web/dist/
+# Your own configuration may hold calendar addresses; keep it out of the repository.
+config.yaml

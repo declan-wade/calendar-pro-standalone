@@ -1,0 +1,14 @@
+# Copy to compose.yaml, put your config.yaml beside it, and run `docker compose up -d`.
+services:
+  calendar:
+    build:
+      context: ..
+      dockerfile: standalone/Dockerfile
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+    environment:
+      # Name each password your config.yaml's `password_env` entries refer to.
+      FASTMAIL_APP_PASSWORD: ${FASTMAIL_APP_PASSWORD:-}
+    restart: unless-stopped
