@@ -18,3 +18,7 @@ wrangler.jsonc
 
 # Agent scratch: a full copy of the tree, so prettier would walk it and double every run.
 /.probe-sandbox
+
+# The standalone app's build output (standalone/.gitignore), which prettier does not read.
+/standalone/server/dist
+/standalone/web/dist
