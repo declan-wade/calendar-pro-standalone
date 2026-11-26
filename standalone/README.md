@@ -58,6 +58,38 @@ docker run -p 8080:8080 -v "$PWD/standalone/config.yaml:/config/config.yaml:ro" 
 
 `compose.example.yaml` does the same with Docker Compose.
 
+### Desktop app (Tauri)
+
+`src-tauri/` packages the same app as a desktop app with [Tauri 2](https://v2.tauri.app). The
+Node backend is bundled inside it as a single executable (a Tauri "sidecar"), built from the
+`node` you build with. When the app opens it starts the backend on a free port on `127.0.0.1`
+and shows the page the backend serves, so the app behaves exactly as `npm start` in a browser.
+
+Needs Node 22 or later and [Rust](https://rustup.rs), plus Tauri's
+[prerequisites](https://v2.tauri.app/start/prerequisites/) (on macOS, the Xcode command line
+tools). Build with an official Node (nodejs.org, nvm, fnm or Volta): Homebrew's `node` links
+against other Homebrew libraries, and the build script warns if it finds them.
+
+```sh
+cd standalone
+npm install
+npm run tauri dev      # run it
+npm run tauri build    # build src-tauri/target/release/bundle/macos/Calendar Pro.app and a .dmg
+```
+
+Both build the card, the page, the server and the sidecar first.
+
+The app reads `config.yaml` from its configuration folder, on macOS
+`~/Library/Application Support/io.github.declanwade.calendarpro/config.yaml` (the `CONFIG`
+environment variable overrides it). If the file is missing, the app says where to put it.
+`port` is ignored: the app picks its own.
+
+CalDAV passwords: for each `password_env` in the configuration, the app uses the environment
+variable if it is set (as with `npm run tauri dev` from a terminal), and otherwise the keychain
+item with service `io.github.declanwade.calendarpro` and account set to the variable's name. If
+there is none, the app asks for the password and saves it there. To change it later, edit or
+delete that item in Keychain Access.
+
 ## Configuration
 
 See [`examples/config.example.yaml`](examples/config.example.yaml). In short:

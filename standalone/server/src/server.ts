@@ -5,6 +5,9 @@
  * - `CONFIG`: path to the YAML configuration (default `config.yaml` in the working directory)
  * - `WEB_ROOT`: directory of the built web app (default `web/dist` beside `server/`)
  * - `PORT`: overrides `port` in the configuration
+ * - `HOST`: address to listen on (default every interface); the desktop app sets `127.0.0.1`
+ * - `EXIT_WITH_STDIN`: when set, exit once standard input closes. The desktop app sets it, so the
+ *   backend stops even when the app is killed rather than quit.
  */
 
 import { createServer } from 'node:http';
@@ -38,6 +41,11 @@ const sources: CalendarSource[] = config.calendars.map((calendar) =>
 
 const log = (message: string): void => console.log(`${new Date().toISOString()} ${message}`);
 const server = createServer(createHandler({ config, sources, webRoot, log }));
-server.listen(config.port, () => {
+server.listen(config.port, process.env.HOST, () => {
   log(`Serving ${sources.length} calendar(s) on http://localhost:${config.port} from ${webRoot}`);
 });
+
+if (process.env.EXIT_WITH_STDIN) {
+  process.stdin.on('end', () => process.exit(0));
+  process.stdin.resume();
+}

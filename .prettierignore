@@ -22,3 +22,7 @@ wrangler.jsonc
 # The standalone app's build output (standalone/.gitignore), which prettier does not read.
 /standalone/server/dist
 /standalone/web/dist
+/standalone/desktop/.build
+/standalone/src-tauri/target
+/standalone/src-tauri/gen
+/standalone/src-tauri/binaries

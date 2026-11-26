@@ -4,3 +4,6 @@
 docs
 tests
 standalone/config.yaml
+standalone/src-tauri/target
+standalone/src-tauri/binaries
+standalone/desktop/.build

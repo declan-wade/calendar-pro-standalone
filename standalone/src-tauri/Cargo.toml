@@ -1,0 +1,33 @@
+[package]
+name = "calendar-pro-desktop"
+version = "0.1.0"
+description = "Calendar Card Pro as a desktop app"
+license = "MIT"
+edition = "2021"
+publish = false
+
+[lib]
+name = "calendar_pro_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["time"] }
+
+# The OS credential store: Keychain on macOS, Credential Manager on Windows, the Secret Service
+# on Linux.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
