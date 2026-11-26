@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calendar Pro</title>
+    <!--
+      The desktop app's start-up page. It asks the Rust side to start the calendar backend, and
+      shows what is missing if it cannot: the configuration file, or a CalDAV password, which it
+      saves to the keychain. Once the backend is up, the window moves to the page it serves.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #212121;
+        --muted: #6b6b6b;
+        --accent: #03a9f4;
+        --error: #db4437;
+        --field: #fff;
+        --border: #cfcfcf;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #111111;
+          --fg: #e1e1e1;
+          --muted: #9b9b9b;
+          --field: #1c1c1c;
+          --border: #3a3a3a;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          15px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 34rem;
+        padding: 1.5rem;
+      }
+      h1 {
+        font-size: 1.2rem;
+        margin: 0 0 0.75rem;
+      }
+      p {
+        margin: 0 0 0.75rem;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85rem;
+        word-break: break-all;
+      }
+      pre {
+        white-space: pre-wrap;
+        color: var(--error);
+      }
+      label {
+        display: block;
+        margin: 0.75rem 0 0.25rem;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--field);
+        color: var(--fg);
+        font: inherit;
+      }
+      button {
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section id="starting">
+        <p class="muted">Starting…</p>
+      </section>
+
+      <section id="no-config" hidden>
+        <h1>No configuration yet</h1>
+        <p>Put your <code>config.yaml</code> here, then try again:</p>
+        <p><code id="config-path"></code></p>
+        <p class="muted">
+          It is the same file the standalone app reads. <code>port</code> is ignored here: the app
+          picks a free port on 127.0.0.1.
+        </p>
+        <button type="button" data-retry>Try again</button>
+      </section>
+
+      <form id="passwords" hidden>
+        <h1>Calendar passwords</h1>
+        <p class="muted">
+          Your configuration names these passwords. They are saved in the keychain, not in the
+          configuration file.
+        </p>
+        <div id="password-fields"></div>
+        <button type="submit">Save and start</button>
+      </form>
+
+      <section id="failed" hidden>
+        <h1>The calendar could not start</h1>
+        <pre id="error"></pre>
+        <button type="button" data-retry>Try again</button>
+      </section>
+    </main>
+
+    <script>
+      const { invoke } = window.__TAURI__.core;
+      const sections = ['starting', 'no-config', 'passwords', 'failed'];
+
+      function show(id) {
+        for (const section of sections) document.getElementById(section).hidden = section !== id;
+      }
+
+      async function start() {
+        show('starting');
+        try {
+          const result = await invoke('start');
+          if (result.kind === 'ready') {
+            window.location.replace(result.url);
+          } else if (result.kind === 'no_config') {
+            document.getElementById('config-path').textContent = result.path;
+            show('no-config');
+          } else if (result.kind === 'need_passwords') {
+            askForPasswords(result.names);
+          }
+        } catch (error) {
+          fail(error);
+        }
+      }
+
+      function askForPasswords(names) {
+        const fields = document.getElementById('password-fields');
+        fields.replaceChildren();
+        for (const name of names) {
+          const label = document.createElement('label');
+          label.textContent = name;
+          const input = document.createElement('input');
+          input.type = 'password';
+          input.name = name;
+          input.required = true;
+          input.autocomplete = 'off';
+          label.append(input);
+          fields.append(label);
+        }
+        show('passwords');
+        fields.querySelector('input')?.focus();
+      }
+
+      function fail(error) {
+        document.getElementById('error').textContent = String(error);
+        show('failed');
+      }
+
+      document.getElementById('passwords').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const passwords = Object.fromEntries(new FormData(event.target));
+        try {
+          await invoke('save_passwords', { passwords });
+        } catch (error) {
+          return fail(error);
+        }
+        start();
+      });
+
+      for (const button of document.querySelectorAll('[data-retry]')) {
+        button.addEventListener('click', start);
+      }
+
+      start();
+    </script>
+  </body>
+</html>

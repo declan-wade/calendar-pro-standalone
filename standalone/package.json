@@ -11,6 +11,8 @@
     "build:server": "tsc -p server",
     "build": "npm run build:card && npm run build:web && npm run build:server",
     "start": "node server/dist/server.js",
+    "build:sidecar": "node desktop/build-sidecar.mjs",
+    "tauri": "tauri",
     "test": "node --test server/dist/**/*.test.js"
   },
   "dependencies": {
@@ -20,8 +22,10 @@
   },
   "devDependencies": {
     "@mdi/js": "^7.4.47",
+    "@tauri-apps/cli": "^2.12.6",
     "@types/node": "^24.19.2",
     "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
     "typescript": "^6.0.3"
   }
 }

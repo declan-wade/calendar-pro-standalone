@@ -2,3 +2,5 @@ server/dist/
 web/dist/
 # Your own configuration may hold calendar addresses; keep it out of the repository.
 config.yaml
+# The desktop sidecar's intermediate files (desktop/build-sidecar.mjs)
+desktop/.build/
