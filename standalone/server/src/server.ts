@@ -10,6 +10,8 @@
  *   backend stops even when the app is killed rather than quit.
  * - `SETTINGS_ACCESS`: who may use the settings page: `local` (default, this computer only),
  *   `any`, or `off`
+ * - `NOTIFICATIONS`: `stdout` to write notifications for upcoming events to standard output, for
+ *   the desktop app to show. Unset, there are none.
  *
  * With no configuration file, or one the server cannot use, it still starts and serves the
  * settings page, so the configuration can be written there.
@@ -21,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { createHandler } from './app.js';
 import { existsSync } from 'node:fs';
 import { ConfigError, loadConfig, type AppConfig } from './config.js';
+import { emitToStdout, Notifier } from './notifications.js';
 import { settingsAccess } from './settings-api.js';
 import { createSources } from './sources/create.js';
 import type { CalendarSource } from './sources/source.js';
@@ -48,22 +51,30 @@ if (config) config.port = port;
 const sources: CalendarSource[] = config ? createSources(config) : [];
 
 const log = (message: string): void => console.log(`${new Date().toISOString()} ${message}`);
+
+const notifier =
+  process.env.NOTIFICATIONS === 'stdout' ? new Notifier({ emit: emitToStdout, log }) : null;
+notifier?.update(config, sources);
+
 const server = createServer(
   createHandler({
     config,
     sources,
     webRoot,
     log,
+    notifier,
     settings: {
       configPath,
       access: settingsAccess(process.env.SETTINGS_ACCESS),
       startupError,
       listeningPort: () => port,
+      notifier,
     },
   }),
 );
 server.listen(port, process.env.HOST, () => {
   log(`Serving ${sources.length} calendar(s) on http://localhost:${port} from ${webRoot}`);
+  notifier?.start();
 });
 
 if (process.env.EXIT_WITH_STDIN) {

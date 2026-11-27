@@ -5,6 +5,10 @@
 //! from the OS credential store, runs the backend on a free port on 127.0.0.1, and returns the
 //! address for the window to load. The backend serves the calendar page and its API, exactly as
 //! when it runs on its own.
+//!
+//! The backend also works out when upcoming events are due a notification. It writes each one to
+//! its standard output as a `CALENDAR_PRO_NOTIFICATION {"title":..,"body":..}` line, which this
+//! side shows through the notification plugin. Clicking one brings the window forward.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::net::TcpListener;
@@ -14,6 +18,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, RunEvent, State};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
@@ -22,6 +27,9 @@ const START_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// How many lines of the backend's error output to show when it fails to start.
 const ERROR_LINES: usize = 20;
+
+/// The start of a line of the backend's output that holds a notification to show.
+const NOTIFICATION_PREFIX: &str = "CALENDAR_PRO_NOTIFICATION ";
 
 /// The running backend, so it can be stopped when the app quits or starts it again.
 #[derive(Default)]
@@ -50,6 +58,13 @@ struct ConfigFile {
 #[derive(Deserialize)]
 struct CalendarEntry {
     password_env: Option<String>,
+}
+
+/// A notification the backend asks for.
+#[derive(Deserialize)]
+struct Notice {
+    title: String,
+    body: String,
 }
 
 /// Starts (or restarts) the backend and returns where the window should go next.
@@ -98,6 +113,7 @@ async fn start(app: AppHandle, backend: State<'_, Backend>) -> Result<Startup, S
         .env("WEB_ROOT", &web_root)
         .env("HOST", "127.0.0.1")
         .env("EXIT_WITH_STDIN", "1")
+        .env("NOTIFICATIONS", "stdout")
         .env("PORT", port.to_string())
         .envs(passwords)
         .spawn()
@@ -112,6 +128,9 @@ async fn start(app: AppHandle, backend: State<'_, Backend>) -> Result<Startup, S
             match event {
                 CommandEvent::Stdout(line) => {
                     let line = String::from_utf8_lossy(&line).trim_end().to_string();
+                    if notify(&app, &line) {
+                        continue;
+                    }
                     println!("[backend] {line}");
                     if line.contains(" Serving ") {
                         return Ok(());
@@ -157,12 +176,16 @@ async fn start(app: AppHandle, backend: State<'_, Backend>) -> Result<Startup, S
     }
 
     // Keep reading the backend's output for as long as it runs. Left unread, its pipes would
-    // fill and the backend would stall on its next log line.
+    // fill and the backend would stall on its next log line. It also carries the notifications.
+    let reader_app = app.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(event) = events.recv().await {
             match event {
                 CommandEvent::Stdout(line) => {
-                    println!("[backend] {}", String::from_utf8_lossy(&line).trim_end())
+                    let line = String::from_utf8_lossy(&line).trim_end().to_string();
+                    if !notify(&reader_app, &line) {
+                        println!("[backend] {line}");
+                    }
                 }
                 CommandEvent::Stderr(line) => {
                     eprintln!("[backend] {}", String::from_utf8_lossy(&line).trim_end())
@@ -178,6 +201,40 @@ async fn start(app: AppHandle, backend: State<'_, Backend>) -> Result<Startup, S
     Ok(Startup::Ready {
         url: format!("http://127.0.0.1:{port}/"),
     })
+}
+
+/// Shows the notification a line of the backend's output asks for. Returns false for a line that
+/// is not a notification, which is logged as usual.
+fn notify(app: &AppHandle, line: &str) -> bool {
+    let Some(json) = line.strip_prefix(NOTIFICATION_PREFIX) else {
+        return false;
+    };
+    match serde_json::from_str::<Notice>(json) {
+        Ok(notice) => {
+            if let Err(error) = app
+                .notification()
+                .builder()
+                .title(notice.title)
+                .body(notice.body)
+                .show()
+            {
+                eprintln!("[notifications] could not show a notification: {error}");
+            }
+        }
+        Err(error) => {
+            eprintln!("[notifications] unreadable notification from the backend: {error}")
+        }
+    }
+    true
+}
+
+/// Brings the main window forward, as when a notification is clicked.
+fn focus_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 /// Saves passwords to the OS credential store, under the app's identifier and the name of the
@@ -256,6 +313,21 @@ fn stop(backend: &Backend) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            // A click on a notification (`tap`) brings the calendar forward. With a handler
+            // registered, the plugin reports clicks as far as the platform does.
+            let handle = app.handle().clone();
+            app.notification().on_action(move |action| {
+                if action.action_id() == "tap" {
+                    let handle = handle.clone();
+                    let _ = handle
+                        .clone()
+                        .run_on_main_thread(move || focus_main_window(&handle));
+                }
+            })?;
+            Ok(())
+        })
         .manage(Backend::default())
         .invoke_handler(tauri::generate_handler![start, save_passwords, create_config])
         .build(tauri::generate_context!())

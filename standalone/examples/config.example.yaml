@@ -29,6 +29,14 @@ calendars:
   #   username: you@example.com
   #   password_env: FASTMAIL_APP_PASSWORD
   #   calendar: Personal # the calendar's name as the server shows it
+  #   notify: false # leave this calendar out of notifications
+
+# Desktop notifications for upcoming events, shown by the desktop app only. Times are in
+# locale.time_zone.
+notifications:
+  enabled: false
+  minutes_before: 10 # 0 to 1440
+  # all_day_at: '09:00' # notify on the day of an all-day event; left out, none
 
 # The card's configuration, exactly as in a Home Assistant dashboard's YAML, without `type`.
 # Every option is documented at https://calendar-card-pro.alexpfau.com.

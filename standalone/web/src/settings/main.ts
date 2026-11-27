@@ -3,6 +3,7 @@
  *
  * - Calendars: where events come from (ICS feeds and CalDAV accounts, with their passwords)
  * - Region and time: language, time zone, time format, first day of the week, country
+ * - Notifications: desktop notifications for upcoming events, and which calendars get them
  * - Card: every option the card has, through the card's own visual editor, with a preview
  * - Data and server: how often calendars are fetched, the port, and the file itself
  * - YAML: the whole file as text, for anything the forms do not cover
@@ -31,6 +32,8 @@ interface Calendar {
   username?: string;
   password_env?: string;
   calendar?: string;
+  /** False to leave this calendar's events out of notifications. */
+  notify?: boolean;
   [key: string]: unknown;
 }
 
@@ -42,6 +45,8 @@ interface SettingsResponse {
   server_time_zone: string;
   port: number;
   port_from_environment: boolean;
+  /** Whether the server runs inside the desktop app, which shows notifications. */
+  notifications_available?: boolean;
 }
 
 interface CheckResult {
@@ -51,11 +56,12 @@ interface CheckResult {
   feed_name?: string;
 }
 
-type Section = 'calendars' | 'region' | 'card' | 'data' | 'yaml';
+type Section = 'calendars' | 'region' | 'notifications' | 'card' | 'data' | 'yaml';
 
 const SECTIONS: ReadonlyArray<{ id: Section; title: string; summary: string }> = [
   { id: 'calendars', title: 'Calendars', summary: 'ICS feeds and CalDAV accounts' },
   { id: 'region', title: 'Region and time', summary: 'Language, time zone, formats' },
+  { id: 'notifications', title: 'Notifications', summary: 'Reminders for upcoming events' },
   { id: 'card', title: 'Card', summary: 'Views, layout, events, colours, toolbar' },
   { id: 'data', title: 'Data and server', summary: 'Refresh, port, the file' },
   { id: 'yaml', title: 'YAML', summary: 'The whole file as text' },
@@ -154,6 +160,7 @@ class StandaloneSettings extends LitElement {
     _yamlError: { state: true },
     _cardError: { state: true },
     _expanded: { state: true },
+    _testStatus: { state: true },
   };
 
   private _loaded = false;
@@ -171,6 +178,8 @@ class StandaloneSettings extends LitElement {
   private _cardError = '';
   /** Calendar rows open for editing, by position. */
   private _expanded = new Set<number>();
+  /** What the test notification button last reported. */
+  private _testStatus: { kind: 'ok' | 'error' | 'info'; text: string } | null = null;
   private _editor: CardEditor | null = null;
   private _preview: CardElement | null = null;
   private _liveConfig: StandaloneConfig | null = null;
@@ -337,6 +346,16 @@ class StandaloneSettings extends LitElement {
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
+    }
+    label.check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    label.check input {
+      width: auto;
+      margin: 0;
     }
     .calendar {
       border: 1px solid var(--divider-color);
@@ -512,6 +531,10 @@ class StandaloneSettings extends LitElement {
 
   private get _card(): Plain {
     return (this._draft.card as Plain | undefined) ?? {};
+  }
+
+  private get _notifications(): Plain {
+    return (this._draft.notifications as Plain | undefined) ?? {};
   }
 
   //---------------------------------------------------------------------------
@@ -697,6 +720,8 @@ class StandaloneSettings extends LitElement {
         return this._renderCalendars();
       case 'region':
         return this._renderRegion();
+      case 'notifications':
+        return this._renderNotifications();
       case 'card':
         return this._renderCard();
       case 'data':
@@ -1304,6 +1329,177 @@ class StandaloneSettings extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  //---------------------------------------------------------------------------
+  // NOTIFICATIONS
+  //---------------------------------------------------------------------------
+
+  /** Sets one key of `notifications`; undefined removes it, and the mapping when it is empty. */
+  private _setNotification(key: string, value: unknown): void {
+    const notifications = { ...this._notifications };
+    if (value === undefined) delete notifications[key];
+    else notifications[key] = value;
+    const next = { ...this._draft };
+    if (Object.keys(notifications).length) next.notifications = notifications;
+    else delete next.notifications;
+    this._setDraft(next);
+  }
+
+  private _renderNotifications(): TemplateResult {
+    const notifications = this._notifications;
+    const enabled = notifications.enabled === true;
+    const minutes = notifications.minutes_before;
+    const allDayAt = typeof notifications.all_day_at === 'string' ? notifications.all_day_at : '';
+    const available = !!this._info?.notifications_available;
+    const zone =
+      typeof this._locale.time_zone === 'string'
+        ? this._locale.time_zone
+        : (this._info?.server_time_zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const calendars = this._calendars;
+    return html`
+      <h2>Notifications</h2>
+      <p class="lead">
+        A desktop notification before each event starts. Times follow the time zone under
+        <a href="#region" @click=${(e: Event) => (e.preventDefault(), this._go('region'))}
+          >Region and time</a
+        >, now ${zone.replace(/_/g, ' ')}. Clicking a notification brings the calendar forward.
+      </p>
+      ${
+        available
+          ? nothing
+          : html`<div class="message info" style="margin-bottom:16px">
+              Notifications are shown by the desktop app. This server is not running inside it, so
+              these settings are saved but nothing is shown.
+            </div>`
+      }
+      <div class="group">
+        <h3>When</h3>
+        <div class="fields">
+          <label class="check">
+            <input
+              type="checkbox"
+              .checked=${enabled}
+              @change=${(e: Event) =>
+                this._setNotification(
+                  'enabled',
+                  (e.target as HTMLInputElement).checked ? true : undefined,
+                )}
+            />
+            <span>Notify me about upcoming events</span>
+          </label>
+        </div>
+        <div class="fields" style="margin-top:14px">
+          <label class="field">
+            <span>Minutes before a timed event</span>
+            <input
+              type="number"
+              min="0"
+              max="1440"
+              step="1"
+              placeholder="10"
+              ?disabled=${!enabled}
+              .value=${minutes === undefined ? '' : String(minutes)}
+              @change=${(e: Event) => {
+                const value = (e.target as HTMLInputElement).value;
+                this._setNotification('minutes_before', value === '' ? undefined : Number(value));
+              }}
+            />
+            <span class="hint"
+              >Default 10. 0 notifies as the event starts; at most 1440 (a day).</span
+            >
+          </label>
+          <div class="field">
+            <label class="check">
+              <input
+                type="checkbox"
+                ?disabled=${!enabled}
+                .checked=${allDayAt !== ''}
+                @change=${(e: Event) =>
+                  this._setNotification(
+                    'all_day_at',
+                    (e.target as HTMLInputElement).checked ? '09:00' : undefined,
+                  )}
+              />
+              <span>Notify about all-day events, at</span>
+            </label>
+            <input
+              type="time"
+              ?disabled=${!enabled || allDayAt === ''}
+              .value=${allDayAt}
+              @change=${(e: Event) => {
+                const value = (e.target as HTMLInputElement).value;
+                this._setNotification('all_day_at', value === '' ? undefined : value);
+              }}
+            />
+            <span class="hint">On the day the event starts.</span>
+          </div>
+        </div>
+      </div>
+      <div class="group">
+        <h3>Calendars</h3>
+        ${
+          calendars.length === 0
+            ? html`<p class="hint" style="margin:0">No calendars yet.</p>`
+            : html`<div class="fields">
+                ${calendars.map(
+                  (calendar, index) =>
+                    html`<label class="check">
+                      <input
+                        type="checkbox"
+                        ?disabled=${!enabled}
+                        .checked=${calendar.notify !== false}
+                        @change=${(e: Event) =>
+                          this._updateCalendar(index, {
+                            notify: (e.target as HTMLInputElement).checked ? undefined : false,
+                          })}
+                      />
+                      <span>${calendar.name || calendar.id}</span>
+                    </label>`,
+                )}
+              </div>`
+        }
+      </div>
+      <div class="group">
+        <h3>Check</h3>
+        <div class="row">
+          <button
+            class="action"
+            type="button"
+            ?disabled=${!available || this._testStatus?.kind === 'info'}
+            @click=${this._testNotification}
+          >
+            Send a test notification
+          </button>
+          ${
+            this._testStatus
+              ? html`<span class="message ${this._testStatus.kind}">${this._testStatus.text}</span>`
+              : nothing
+          }
+        </div>
+        <p class="hint">
+          If nothing appears, allow notifications for Calendar Pro in the system’s settings (on
+          macOS, System Settings, Notifications). Changes here take effect when you save.
+        </p>
+      </div>
+    `;
+  }
+
+  private async _testNotification(): Promise<void> {
+    this._testStatus = { kind: 'info', text: 'Sending…' };
+    try {
+      const response = await fetch('api/settings/notifications/test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      const body = await response.json().catch(() => ({}));
+      this._testStatus = response.ok
+        ? { kind: 'ok', text: 'Sent.' }
+        : { kind: 'error', text: body.message ?? `The test answered ${response.status}` };
+    } catch (error) {
+      this._testStatus = { kind: 'error', text: (error as Error).message };
+    }
   }
 
   //---------------------------------------------------------------------------

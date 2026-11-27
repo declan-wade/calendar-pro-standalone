@@ -97,15 +97,25 @@ item with service `io.github.declanwade.calendarpro` and account set to the vari
 there is none, the app asks for the password and saves it there. To change it later, edit or
 delete that item in Keychain Access.
 
+Notifications: with `notifications.enabled` (on the settings page, Notifications), the app shows
+a system notification before each event, through Tauri's
+[notification plugin](https://v2.tauri.app/plugin/notification/). The backend works out what is
+due every 30 seconds and writes it to its standard output as a `CALENDAR_PRO_NOTIFICATION`
+line, which the Rust side shows; clicking one brings the window forward. A notification more
+than 10 minutes late (after sleep, say) is dropped. The app has to be running for them to
+appear. If none do, allow Calendar Pro under System Settings, Notifications.
+
 ## Settings page
 
 `/settings.html`, linked from the gear in the corner of the calendar, edits everything
-`config.yaml` holds, in five sections:
+`config.yaml` holds, in six sections:
 
 - **Calendars**: add, remove and reorder ICS feeds and CalDAV calendars. A feed can be tested;
   a CalDAV account can be connected to list its calendars to choose from. Common CalDAV
   addresses (Fastmail, iCloud, Nextcloud) are offered.
 - **Region and time**: language, time zone, time format, first day of the week, country.
+- **Notifications**: on or off, how many minutes before an event, a time for all-day events,
+  which calendars, and a test button. Shown by the desktop app only.
 - **Card**: every card option, through the card's own visual editor (the one Home Assistant
   shows), with a live preview. `web/src/settings/ha-form.ts` stands in for Home Assistant's form
   component, which the editor draws its fields with.
@@ -138,6 +148,9 @@ See [`examples/config.example.yaml`](examples/config.example.yaml). In short:
 - `locale`: `language`, `time_zone` (IANA, such as `Australia/Perth`), `time_format`,
   `first_weekday`, `country`. With `time_zone` set, the page shows times in that zone wherever
   the browser runs (`web/src/time-zone.ts`); without it, in the browser computer's own zone.
+- `notifications` (desktop app only): `enabled` (default `false`), `minutes_before` (default
+  `10`, up to `1440`) and `all_day_at` (`HH:MM` in the configured time zone on the day of an
+  all-day event; left out, all-day events get none). A calendar with `notify: false` gets none.
 - `card`: the card's own options, exactly as in a Home Assistant dashboard. They are documented
   at <https://calendar-card-pro.alexpfau.com>. Calendars are referred to by the `id`s above.
 
