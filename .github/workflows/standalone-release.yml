@@ -52,7 +52,7 @@ jobs:
             -f body="Desktop builds of Calendar Pro. The installers are unsigned." \
             -F draft=true \
             -F prerelease=false \
-            -F make_latest=false \
+            -f make_latest=false \
             --jq .id)"
           echo "id=${ID}" >> "$GITHUB_OUTPUT"
           echo "Created draft release ${ID}"
