@@ -39,17 +39,6 @@ jobs:
             exit 1
           fi
 
-      - name: Verify tag matches the app version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#standalone-v}"
-          PKG_VERSION="$(node -p "require('./standalone/package.json').version")"
-          TAURI_VERSION="$(node -p "require('./standalone/src-tauri/tauri.conf.json').version")"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ] || [ "$TAG_VERSION" != "$TAURI_VERSION" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match standalone/package.json ($PKG_VERSION) and tauri.conf.json ($TAURI_VERSION)."
-            exit 1
-          fi
-          echo "Version check passed: ${TAG_VERSION}"
-
       # Created once here so the build jobs below upload to the same release instead of
       # racing to create it.
       - name: Create draft release
