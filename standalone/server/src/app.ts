@@ -21,6 +21,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { AppConfig } from './config.js';
 import { expandCalendar } from './ical.js';
+import type { Notifier } from './notifications.js';
 import { createSettingsRoutes, type SettingsOptions } from './settings-api.js';
 import { createSources } from './sources/create.js';
 import type { CalendarSource } from './sources/source.js';
@@ -49,6 +50,8 @@ export interface AppOptions {
   /** Directory holding the built web app. */
   webRoot: string;
   log?: (message: string) => void;
+  /** Told of each saved configuration, so notifications follow it. */
+  notifier?: Notifier | null;
 }
 
 export function createHandler(options: AppOptions) {
@@ -64,6 +67,7 @@ export function createHandler(options: AppOptions) {
           config = next;
           sources = createSources(next);
           byId = new Map(sources.map((source) => [source.id, source]));
+          options.notifier?.update(next, sources);
           log(`Applied new settings: ${sources.length} calendar(s)`);
         },
       })

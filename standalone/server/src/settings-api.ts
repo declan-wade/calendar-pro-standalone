@@ -7,6 +7,8 @@
  *   passwords in memory, writes the file and applies it without a restart
  * - `POST /api/settings/check`: `{ calendar, password? }`. Reads an ICS feed or logs in to a
  *   CalDAV server, and says what it found
+ * - `POST /api/settings/notifications/test`: `{}`. Shows a sample notification, where the server
+ *   runs inside the desktop app
  *
  * These change what the server reads and where it connects, so by default they answer only a
  * browser on the same computer (`SETTINGS_ACCESS=local`). `SETTINGS_ACCESS=any` opens them to
@@ -18,6 +20,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { checkCalendar, checkConfig, ConfigError, type AppConfig } from './config.js';
 import { readConfigFile, writeConfigFile } from './config-file.js';
 import { passwordFor, passwordSource, setPassword } from './secrets.js';
+import type { Notifier } from './notifications.js';
 import { listCalendarNames } from './sources/caldav.js';
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -35,6 +38,8 @@ export interface SettingsOptions {
   apply(config: AppConfig): void;
   /** The port the server listens on, to tell whether a save needs a restart. */
   listeningPort(): number;
+  /** Shows notifications, in the desktop app. Null or left out elsewhere. */
+  notifier?: Pick<Notifier, 'test'> | null;
 }
 
 /**
@@ -98,6 +103,7 @@ export function createSettingsRoutes(options: SettingsOptions) {
         server_time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         port: options.listeningPort(),
         port_from_environment: !!process.env.PORT,
+        notifications_available: !!options.notifier,
       });
       return true;
     }
@@ -138,6 +144,16 @@ export function createSettingsRoutes(options: SettingsOptions) {
     if (url.pathname === '/api/settings/check' && req.method === 'POST') {
       const body = (await readJson(req)) as { calendar?: unknown; password?: unknown };
       send(res, 200, await checkSource(body?.calendar, body?.password));
+      return true;
+    }
+
+    if (url.pathname === '/api/settings/notifications/test' && req.method === 'POST') {
+      if (!options.notifier) {
+        send(res, 409, { message: 'Notifications are shown by the desktop app only.' });
+        return true;
+      }
+      options.notifier.test();
+      send(res, 200, { sent: true });
       return true;
     }
 

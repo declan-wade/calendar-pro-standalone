@@ -196,7 +196,9 @@ const COVERAGE_EXCLUDES = ['development/', 'architecture', 'RELEASE_NOTES.md'];
  * The prose files at the repository root, which `listDocs` cannot reach because it walks
  * `docs/` only. Check 12 reads these as well; see its docblock for why.
  */
-const ROOT_PROSE = ['AGENTS.md', 'README.md', 'CONTRIBUTING.md'].map((name) => join(ROOT, name));
+const ROOT_PROSE = ['AGENTS.md', 'UPSTREAM_README.md', 'CONTRIBUTING.md'].map((name) =>
+  join(ROOT, name),
+);
 
 /**
  * RELEASE_NOTES.md is exempt from the example convention as well, for the opposite
@@ -627,7 +629,7 @@ function checkConfigVersion() {
  * example because the README is the HACS landing page.
  */
 function checkReadmeExample() {
-  const readme = join(ROOT, 'README.md');
+  const readme = join(ROOT, 'UPSTREAM_README.md');
   const usage = join(DOCS_DIR, 'guide/usage.md');
 
   const firstCard = (file) => {
@@ -1842,10 +1844,10 @@ function checkAgentsDuplication() {
  * the contract `check-bundle.mjs` uses for its size claims.
  */
 const LANGUAGE_COUNT_SITES = [
-  ['README.md', /\[Available in (\d+) languages\]/g, 'card'],
-  ['README.md', /The card speaks \[(\d+) languages\]/g, 'card'],
-  ['README.md', /and the visual editor (\d+)\b/g, 'editor'],
-  ['README.md', /with the visual editor in (\d+)\b/g, 'editor'],
+  ['UPSTREAM_README.md', /\[Available in (\d+) languages\]/g, 'card'],
+  ['UPSTREAM_README.md', /The card speaks \[(\d+) languages\]/g, 'card'],
+  ['UPSTREAM_README.md', /and the visual editor (\d+)\b/g, 'editor'],
+  ['UPSTREAM_README.md', /with the visual editor in (\d+)\b/g, 'editor'],
   ['docs/index.md', /\[Available in (\d+) languages\]/g, 'card'],
   ['docs/index.md', /with the visual editor in (\d+)\b/g, 'editor'],
   ['docs/architecture.md', /\((\d+) supported languages\)/g, 'card'],
@@ -2314,7 +2316,7 @@ function checkReleaseVersion() {
     );
   }
 
-  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const readme = readFileSync(join(ROOT, 'UPSTREAM_README.md'), 'utf8');
   // Sliced rather than matched with an end anchor: JavaScript has no `\Z`, and `$` under
   // /m would stop at the first line break.
   const start = readme.search(/^## [^\n]*What's New/m);
@@ -2764,7 +2766,7 @@ function readRuntimeEnums() {
  * @returns {number} pages checked
  */
 function checkRuntimeEnumTables(enums, docs) {
-  const pages = [...docs, join(ROOT, 'README.md')];
+  const pages = [...docs, join(ROOT, 'UPSTREAM_README.md')];
   let checked = 0;
 
   for (const [option, { values, noun }] of enums) {
@@ -2836,7 +2838,7 @@ function checkRuntimeEnumTables(enums, docs) {
  * @returns {number} how many option/value pairs were examined
  */
 function checkRuntimeEnumUsages(enums, docs) {
-  const pages = [...docs, join(ROOT, 'README.md'), join(ROOT, 'CONTRIBUTING.md')];
+  const pages = [...docs, join(ROOT, 'UPSTREAM_README.md'), join(ROOT, 'CONTRIBUTING.md')];
   let checked = 0;
 
   for (const [option, { values, fallback }] of enums) {
@@ -3271,7 +3273,7 @@ function checkCitations() {
   const all = [
     ...SCAN.flatMap((d) => walk(join(ROOT, d))),
     ...walk(DOCS_DIR),
-    join(ROOT, 'README.md'),
+    join(ROOT, 'UPSTREAM_README.md'),
     join(ROOT, 'AGENTS.md'),
     join(ROOT, 'CONTRIBUTING.md'),
   ];
@@ -3362,7 +3364,7 @@ function checkReadmeFragmentLinks() {
   };
   walk(join(ROOT, '.github'));
   walk(DOCS_DIR);
-  for (const name of ['README.md', 'CONTRIBUTING.md', 'AGENTS.md']) {
+  for (const name of ['UPSTREAM_README.md', 'CONTRIBUTING.md', 'AGENTS.md']) {
     const full = join(ROOT, name);
     if (existsSync(full)) surfaces.push(full);
   }
@@ -3632,7 +3634,7 @@ function checkAbsoluteSiteLinks(docs) {
   const { anchors } = buildAnchorMap(docs);
 
   const surfaces = [...docs];
-  for (const name of ['README.md', 'CONTRIBUTING.md']) {
+  for (const name of ['UPSTREAM_README.md', 'CONTRIBUTING.md']) {
     const full = join(ROOT, name);
     if (existsSync(full)) surfaces.push(full);
   }
@@ -3788,7 +3790,7 @@ const CARD_NAME_ALLOWED = new Map([
     '04302151e66830a3',
     new Map([
       ['NOTICE', { line: '2eada0ce45244055', count: 1 }],
-      ['README.md', { line: '5528a475d2b88c3f', count: 2 }],
+      ['UPSTREAM_README.md', { line: '5528a475d2b88c3f', count: 2 }],
       ['docs/index.md', { line: '5528a475d2b88c3f', count: 2 }],
       ['src/calendar-card-pro.ts', { line: 'b8d2056eaa9e2ff1', count: 1 }],
     ]),
